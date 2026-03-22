@@ -4,7 +4,11 @@
  * All boxes use a shared inner width W for consistent ║ alignment.
  */
 
-const W = 64 // inner width for all bordered boxes
+let W = 64 // inner width for all bordered boxes — updated dynamically for mobile
+
+export function setBoxWidth(w) {
+  W = Math.max(30, Math.min(64, w))
+}
 
 function esc(str) {
   if (!str) return ''
@@ -62,6 +66,14 @@ function wrapText(text, maxLen) {
   }
   if (remaining) lines.push(remaining)
   return lines
+}
+
+function bMuted(text) {
+  const chunks = wrapText(text, W - 2)
+  if (chunks.length === 1) {
+    return { text: '  ║  ' + padRight(chunks[0], W - 2) + '║', type: 'muted' }
+  }
+  return chunks.map((c) => ({ text: '  ║  ' + padRight(c, W - 2) + '║', type: 'muted' }))
 }
 
 function bText(text) {
@@ -289,7 +301,7 @@ export function formatCertifications(data) {
 }
 
 // ── format: ls output ────────────────────────────────────────────────
-export function formatLs(entries) {
+export function formatLs(entries, termWidth = 80) {
   const lines = []
   const dirs = entries.filter((e) => e.type === 'dir')
   const files = entries.filter((e) => e.type === 'file')
@@ -297,7 +309,6 @@ export function formatLs(entries) {
   const all = [...dirs.map((d) => ({ display: d.name + '/', type: 'dir' })), ...files.map((f) => ({ display: f.name, type: 'file' }))]
 
   const colWidth = Math.max(...all.map((a) => a.display.length)) + 4
-  const termWidth = 80
   const cols = Math.max(1, Math.floor(termWidth / colWidth))
 
   for (let i = 0; i < all.length; i += cols) {
@@ -355,7 +366,7 @@ export function formatHelp(t) {
     bAccent('Session:'),
     bText('  exit                ' + t('terminal_help_exit')),
     bEmpty(),
-    { text: '  ║  Colors: green, red, purple, olive, blue, pink, orange' + ' '.repeat(Math.max(0, W - 2 - 'Colors: green, red, purple, olive, blue, pink, orange'.length)) + '║', type: 'muted' },
+    bMuted('Colors: green, red, purple, olive, blue, pink, orange'),
     bEmpty(),
     bBot(),
     blankLine()
@@ -363,17 +374,27 @@ export function formatHelp(t) {
 }
 
 // ── format: welcome banner ───────────────────────────────────────────
-export function formatWelcome(t) {
+export function formatWelcome(t, narrow = false) {
+  const banner = narrow
+    ? [
+        blankLine(),
+        asciiLine('  ╔' + '═'.repeat(W) + '╗'),
+        { text: '  ║' + padCenter('✦  CHARLOT DEDJINOU  ✦', W) + '║', type: 'ascii' },
+        asciiLine('  ╚' + '═'.repeat(W) + '╝'),
+      ]
+    : [
+        blankLine(),
+        asciiLine('     ██████╗██╗  ██╗ █████╗ ██████╗ ██╗      ██████╗ ████████╗'),
+        asciiLine('    ██╔════╝██║  ██║██╔══██╗██╔══██╗██║     ██╔═══██╗╚══██╔══╝'),
+        asciiLine('    ██║     ███████║███████║██████╔╝██║     ██║   ██║   ██║   '),
+        asciiLine('    ██║     ██╔══██║██╔══██║██╔══██╗██║     ██║   ██║   ██║   '),
+        asciiLine('    ╚██████╗██║  ██║██║  ██║██║  ██║███████╗╚██████╔╝   ██║   '),
+        asciiLine('     ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝    ╚═╝   '),
+        blankLine(),
+      ]
+
   return [
-    blankLine(),
-    blankLine(),
-    asciiLine('     ██████╗██╗  ██╗ █████╗ ██████╗ ██╗      ██████╗ ████████╗'),
-    asciiLine('    ██╔════╝██║  ██║██╔══██╗██╔══██╗██║     ██╔═══██╗╚══██╔══╝'),
-    asciiLine('    ██║     ███████║███████║██████╔╝██║     ██║   ██║   ██║   '),
-    asciiLine('    ██║     ██╔══██║██╔══██║██╔══██╗██║     ██║   ██║   ██║   '),
-    asciiLine('    ╚██████╗██║  ██║██║  ██║██║  ██║███████╗╚██████╔╝   ██║   '),
-    asciiLine('     ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝    ╚═╝   '),
-    blankLine(),
+    ...banner,
     bTop(),
     bEmpty(),
     bAccent(padCenter('Welcome to my Portfolio Terminal', W - 4)),

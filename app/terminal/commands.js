@@ -149,7 +149,7 @@ function cmdLs(args, ctx) {
   }
 
   const entries = listDirectory(result.node)
-  return { lines: formatLs(entries), action: null }
+  return { lines: formatLs(entries, ctx.termWidth || 80), action: null }
 }
 
 function cmdCd(args, ctx) {

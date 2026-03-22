@@ -5,7 +5,8 @@
   top: 0;
   left: 0;
   width: 100vw;
-  height: 100vh;
+  height: 100vh; // fallback
+  height: 100dvh; // shrinks when virtual keyboard appears
   z-index: 9999;
   font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
   font-size: 14px;
@@ -140,6 +141,60 @@
     &::placeholder {
       opacity: 0.3;
     }
+  }
+}
+
+// ── mobile exit button ────────────────────────────────────────────────
+.terminal-exit-btn {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+  z-index: 10;
+  opacity: 0.8;
+  font-family: inherit;
+
+  &:hover,
+  &:active {
+    opacity: 1;
+  }
+}
+
+// ── mobile quick-command bar ──────────────────────────────────────────
+.terminal-quick-bar {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 6px;
+  padding: 6px 0 4px;
+  flex-shrink: 0;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.terminal-quick-btn {
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 10px;
+  padding: 3px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  opacity: 0.85;
+  transition: opacity 0.15s;
+
+  &:active {
+    opacity: 1;
   }
 }
 

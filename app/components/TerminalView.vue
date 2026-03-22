@@ -1,11 +1,11 @@
 <script setup>
-import { ref, reactive, computed, nextTick, onMounted, watch } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { usePortfolioStore } from '~/stores/portfolio'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { buildFilesystem, getPathString } from '~/terminal/filesystem.js'
 import { executeCommand, tabComplete } from '~/terminal/commands.js'
-import { formatWelcome } from '~/terminal/formatters.js'
+import { formatWelcome, setBoxWidth } from '~/terminal/formatters.js'
 import { downloadCV, viewCV } from '~/utils/utils.js'
 import '~/terminal/terminal.scss'
 
@@ -21,6 +21,7 @@ const commandHistory = ref([])
 const historyIndex = ref(-1)
 const outputRef = ref(null)
 const inputRef = ref(null)
+const containerRef = ref(null)
 let lineIdCounter = 0
 
 const fsState = reactive({
@@ -32,9 +33,59 @@ const fsState = reactive({
 const uniColor = computed(() => store.uniColor)
 const isDark = computed(() => store.dark)
 
+// ── responsive layout ────────────────────────────────────────────────
+const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1200)
+
+const isMobile = computed(() => windowWidth.value <= 768)
+
+// Approximate number of monospace characters that fit in the viewport
+const termW = computed(() => {
+  const vw = windowWidth.value
+  let fontSize, padding
+  if (vw <= 480) {
+    fontSize = 11
+    padding = 16 // 8px * 2
+  } else if (vw <= 768) {
+    fontSize = 12
+    padding = 24 // 12px * 2
+  } else {
+    fontSize = 14
+    padding = 40 // 20px * 2
+  }
+  // JetBrains Mono char width ≈ fontSize * 0.605
+  const charWidth = fontSize * 0.605
+  const availableChars = Math.floor((vw - padding) / charWidth)
+  // subtract box overhead (2 indent + ╔ + ╗ = 4 chars) + small buffer
+  return Math.max(30, Math.min(64, availableChars - 6))
+})
+
+// Approx chars available per line (for ls column layout)
+const termWidth = computed(() => {
+  const vw = windowWidth.value
+  let fontSize, padding
+  if (vw <= 480) { fontSize = 11; padding = 16 }
+  else if (vw <= 768) { fontSize = 12; padding = 24 }
+  else { fontSize = 14; padding = 40 }
+  return Math.floor((vw - padding) / (fontSize * 0.605))
+})
+
+function updateLayout() {
+  windowWidth.value = window.innerWidth
+  setBoxWidth(termW.value)
+}
+
+function onVisualViewportResize() {
+  if (containerRef.value && window.visualViewport) {
+    containerRef.value.style.height = window.visualViewport.height + 'px'
+    containerRef.value.style.top = window.visualViewport.offsetTop + 'px'
+  }
+}
+
+// ── prompt ────────────────────────────────────────────────────────────
 const prompt = computed(() => {
   const path = getPathString(fsState.currentPath)
-  return `charlot@portfolio:${path}$ `
+  // Shorten prompt on mobile to leave room for input
+  return isMobile.value ? `${path}$ ` : `charlot@portfolio:${path}$ `
 })
 
 const terminalClass = computed(() => ({
@@ -43,10 +94,25 @@ const terminalClass = computed(() => ({
   'terminal-light': !isDark.value
 }))
 
+// ── quick commands for mobile ─────────────────────────────────────────
+const quickCommands = ['help', 'ls', 'whoami', 'clear', 'exit']
+
 // ── lifecycle ────────────────────────────────────────────────────────
 onMounted(() => {
+  updateLayout()
   showWelcome()
   focusInput()
+  window.addEventListener('resize', updateLayout)
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', onVisualViewportResize)
+  }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateLayout)
+  if (window.visualViewport) {
+    window.visualViewport.removeEventListener('resize', onVisualViewportResize)
+  }
 })
 
 // rebuild filesystem when language changes
@@ -56,6 +122,11 @@ watch(
     fsState.root = buildFilesystem(t)
   }
 )
+
+// update box width whenever the computed term width changes
+watch(termW, (newW) => {
+  setBoxWidth(newW)
+})
 
 // ── helpers ──────────────────────────────────────────────────────────
 function pushLines(lines) {
@@ -80,7 +151,7 @@ function focusInput() {
 }
 
 function showWelcome() {
-  pushLines(formatWelcome(t))
+  pushLines(formatWelcome(t, windowWidth.value <= 480))
 }
 
 // ── command submission ───────────────────────────────────────────────
@@ -106,6 +177,7 @@ async function submitCommand() {
     i18n,
     t,
     history: commandHistory.value,
+    termWidth: termWidth.value,
     openUrl: (url) => window.open(url, '_blank')
   }
 
@@ -120,8 +192,7 @@ async function submitCommand() {
   }
 
   if (result.action === 'exit') {
-    store.setTerminalMode(false)
-    router.push(i18n.locale.value === 'fr' ? '/fr/' : '/')
+    exitTerminal()
     return
   }
 
@@ -143,6 +214,18 @@ async function submitCommand() {
     runDownloadProgress(result.downloadLang)
     return
   }
+}
+
+// Submit a command programmatically (used by quick-command buttons)
+function submitWithCommand(cmd) {
+  currentInput.value = cmd
+  submitCommand()
+  focusInput()
+}
+
+function exitTerminal() {
+  store.setTerminalMode(false)
+  router.push(i18n.locale.value === 'fr' ? '/fr/' : '/')
 }
 
 // ── animated download progress bar ───────────────────────────────────
@@ -267,7 +350,16 @@ function renderHighlight(text) {
 </script>
 
 <template>
-  <div :class="terminalClass" @click="handleContainerClick">
+  <div :class="terminalClass" @click="handleContainerClick" ref="containerRef">
+    <!-- Mobile exit button -->
+    <button
+      v-if="isMobile"
+      class="terminal-exit-btn"
+      :style="{ color: uniColor }"
+      @click.stop="exitTerminal"
+      aria-label="Exit terminal"
+    >✕</button>
+
     <div class="terminal-output" ref="outputRef">
       <template v-for="lineItem in outputLines" :key="lineItem.id">
         <!-- ls output with mixed dir/file coloring -->
@@ -287,6 +379,18 @@ function renderHighlight(text) {
         </div>
       </template>
     </div>
+
+    <!-- Mobile quick-command bar -->
+    <div v-if="isMobile" class="terminal-quick-bar">
+      <button
+        v-for="cmd in quickCommands"
+        :key="cmd"
+        class="terminal-quick-btn"
+        :style="{ borderColor: uniColor, color: uniColor }"
+        @click.prevent="submitWithCommand(cmd)"
+      >{{ cmd }}</button>
+    </div>
+
     <div class="terminal-input-line">
       <span class="terminal-prompt" :style="{ color: uniColor }">{{ prompt }}</span>
       <input
